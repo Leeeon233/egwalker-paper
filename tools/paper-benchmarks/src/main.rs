@@ -1,20 +1,20 @@
 #![allow(unused)]
 
+use argh::FromArgs;
 use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::path::PathBuf;
-use argh::FromArgs;
 
-use automerge::{AutoCommit, ReadDoc};
 use automerge::transaction::Transactable;
+use automerge::{AutoCommit, ReadDoc};
 use crdt_testdata::{load_testing_data, TestData};
 #[cfg(feature = "bench")]
 use criterion::Criterion;
 use diamond_types::list::ListOpLog;
 use serde::Serialize;
 use trace_alloc::measure_memusage;
-use yrs::{GetString, Text, Transact};
 use yrs::updates::decoder::Decode;
+use yrs::{GetString, Text, Transact};
 
 #[cfg(feature = "bench")]
 use crate::convert1::bench_automerge_remote;
@@ -22,8 +22,8 @@ use crate::convert1::bench_automerge_remote;
 use crate::convert1::bench_yrs_remote;
 
 mod benchmarks;
-mod ff_bench;
 mod convert1;
+mod ff_bench;
 
 const DATASETS: &[&str] = &["S1", "S2", "S3", "C1", "C2", "A1", "A2"];
 // const DATASETS: &[&str] = &[];
@@ -36,7 +36,11 @@ struct MemUsage {
 }
 
 fn stem() -> &'static str {
-    if PathBuf::from("datasets").exists() { "." } else { "../.." }
+    if PathBuf::from("datasets").exists() {
+        "."
+    } else {
+        "../.."
+    }
 }
 
 pub fn am_filename_for(trace: &str) -> String {
@@ -49,7 +53,11 @@ pub fn yjs_filename_for(trace: &str) -> String {
 
 // $ cargo run --features memusage --release
 #[cfg(feature = "memusage")]
-fn measure_memory<T>(prefix: &'static str, mut filename_for: impl FnMut(&str) -> String, mut run: impl FnMut(&[u8]) -> T) {
+fn measure_memory<T>(
+    prefix: &'static str,
+    mut filename_for: impl FnMut(&str) -> String,
+    mut run: impl FnMut(&[u8]) -> T,
+) {
     let mut usage = BTreeMap::new();
 
     for &name in DATASETS {
@@ -83,19 +91,20 @@ fn bench_main() {
     // print_xf_sizes("clownschool", 100);
     // print_xf_sizes("node_nodecc", 200);
     // print_xf_sizes("git-makefile", 200);
-//
-//     // benchmarks::print_filesize();
-//     // if cfg!(feature = "memusage") {
-//     //     benchmarks::print_memusage();
-//     // }
-
+    //
+    //     // benchmarks::print_filesize();
+    //     // if cfg!(feature = "memusage") {
+    //     //     benchmarks::print_memusage();
+    //     // }
 
     #[cfg(feature = "memusage")]
     {
         let cfg: Cfg = argh::from_env();
 
         if !cfg.automerge && !cfg.yjs {
-            eprintln!("Missing argument: Specify -y for yjs memusage tracking and -a for automerge");
+            eprintln!(
+                "Missing argument: Specify -y for yjs memusage tracking and -a for automerge"
+            );
         }
 
         if cfg.automerge {
@@ -123,9 +132,9 @@ fn bench_main() {
     }
 
     // Benchmarks are selected using criterion's own args parser.
-    #[cfg(feature = "bench")] {
-        let mut c = Criterion::default()
-            .configure_from_args();
+    #[cfg(feature = "bench")]
+    {
+        let mut c = Criterion::default().configure_from_args();
 
         // bench_cola_remote(&mut c);
         bench_automerge_remote(&mut c);
@@ -133,7 +142,7 @@ fn bench_main() {
         bench_yrs_remote(&mut c);
         // bench_ff(&mut c);
 
-        // benchmarks::local_benchmarks(&mut c);
+        benchmarks::local_benchmarks(&mut c);
 
         c.final_summary();
 
@@ -146,22 +155,19 @@ pub fn linear_testing_data(name: &str) -> TestData {
     load_testing_data(&filename)
 }
 
-
 /// Convert json editing traces to automerge and yjs
 #[derive(Debug, FromArgs)]
 struct Cfg {
     /// convert to yjs
-    #[argh(switch, short='y')]
+    #[argh(switch, short = 'y')]
     yjs: bool,
     /// convert to automerge
-    #[argh(switch, short='a')]
+    #[argh(switch, short = 'a')]
     automerge: bool,
-
     // /// input filename
     // #[argh(positional)]
     // input: PathBuf,
 }
-
 
 fn main() {
     // convert_main()

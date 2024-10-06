@@ -435,6 +435,34 @@ pub fn bench_yrs_remote(c: &mut Criterion) {
     }
 }
 
+#[cfg(feature = "bench")]
+pub fn bench_loro_remote(c: &mut Criterion) {
+
+    for &name in DATASETS {
+        let mut group = c.benchmark_group("yrs");
+
+        // let name = "friendsforever";
+        let filename = yjs_filename_for(name);
+        let bytes = std::fs::read(&filename).unwrap();
+        group.bench_function(BenchmarkId::new("remote", name), |b| {
+            b.iter(|| {
+                let mut doc = yrs::Doc::new();
+                let update = yrs::Update::decode_v2(&bytes).unwrap();
+                {
+                    let mut txn = doc.transact_mut();
+                    txn.apply_update(update);
+                    txn.commit();
+                }
+
+                let text_ref = doc.get_or_insert_text("text");
+                let text = text_ref.get_string(&doc.transact());
+
+                black_box((doc, text));
+            })
+        });
+    }
+}
+
 
 fn convert_automerge(filename: &str) {
     println!("Processing {filename}...");

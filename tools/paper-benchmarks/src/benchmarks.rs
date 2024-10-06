@@ -1,21 +1,27 @@
-use std::hint::black_box;
-use std::ops::Range;
-use diamond_types_crdt::list::ListCRDT as DTCRDT;
-#[cfg(feature = "bench")]
-use criterion::{Bencher, BenchmarkId, Criterion, Throughput};
-use diamond_types::list::ListOpLog;
-use diamond_types::list::encoding::ENCODE_FULL;
-use diamond_types::AgentId;
+use automerge::transaction::Transactable;
 use automerge::{AutoCommit, Automerge, ObjType};
 use crdt_testdata::{TestData, TestPatch};
+#[cfg(feature = "bench")]
+use criterion::{Bencher, BenchmarkId, Criterion, Throughput};
+use diamond_types::list::encoding::ENCODE_FULL;
+use diamond_types::list::ListOpLog;
+use diamond_types::AgentId;
+use diamond_types_crdt::list::ListCRDT as DTCRDT;
+use loro::LoroDoc;
+use std::hint::black_box;
+use std::ops::Range;
 use trace_alloc::get_thread_memory_usage;
 use yrs::{Text, TextRef, Transact};
-use automerge::transaction::Transactable;
 
 // pub const LINEAR_DATASETS: &[&str] = &["automerge-paper", "seph-blog1", "friendsforever_flat", "clownschool_flat"];
-pub const LINEAR_DATASETS: &[&str] = &["automerge-paper", "seph-blog1", "friendsforever_flat", "clownschool_flat", "egwalker"];
+pub const LINEAR_DATASETS: &[&str] = &[
+    "automerge-paper",
+    "seph-blog1",
+    "friendsforever_flat",
+    "clownschool_flat",
+    "egwalker",
+];
 // pub const LINEAR_DATASETS: &[&str] = &["automerge-paper", "rustcode", "sveltecomponent", "seph-blog1", "friendsforever_flat", "clownschool_flat"];
-
 
 pub trait UpstreamTextCRDT {
     fn new() -> Self;
@@ -127,7 +133,9 @@ type AutomergeCRDT = (AutoCommit, automerge::ObjId);
 impl UpstreamTextCRDT for AutomergeCRDT {
     fn new() -> Self {
         let mut doc = AutoCommit::new();
-        let id = doc.put_object(automerge::ROOT, "text", ObjType::Text).unwrap();
+        let id = doc
+            .put_object(automerge::ROOT, "text", ObjType::Text)
+            .unwrap();
         (doc, id)
     }
 
@@ -136,7 +144,9 @@ impl UpstreamTextCRDT for AutomergeCRDT {
     }
 
     fn local_del(&mut self, range: Range<usize>) {
-        self.0.splice_text(&self.1, range.start, range.len() as _, "").unwrap();
+        self.0
+            .splice_text(&self.1, range.start, range.len() as _, "")
+            .unwrap();
     }
 
     fn local_ins(&mut self, pos: usize, content: &str) {
@@ -169,9 +179,10 @@ type AutomergeCRDT2 = (Automerge, automerge::ObjId);
 impl UpstreamTextCRDT for AutomergeCRDT2 {
     fn new() -> Self {
         let mut doc = Automerge::new();
-        let id = doc.transact(|txn| {
-            txn.put_object(automerge::ROOT, "text", ObjType::Text)
-        }).unwrap().result;
+        let id = doc
+            .transact(|txn| txn.put_object(automerge::ROOT, "text", ObjType::Text))
+            .unwrap()
+            .result;
         (doc, id)
     }
 
@@ -180,15 +191,17 @@ impl UpstreamTextCRDT for AutomergeCRDT2 {
     }
 
     fn local_del(&mut self, range: Range<usize>) {
-        let id = self.0.transact(|txn| {
-            txn.splice_text(&self.1, range.start, range.len() as _, "")
-        }).unwrap();
+        let id = self
+            .0
+            .transact(|txn| txn.splice_text(&self.1, range.start, range.len() as _, ""))
+            .unwrap();
     }
 
     fn local_ins(&mut self, pos: usize, content: &str) {
-        let id = self.0.transact(|txn| {
-            txn.splice_text(&self.1, pos, 0, content)
-        }).unwrap();
+        let id = self
+            .0
+            .transact(|txn| txn.splice_text(&self.1, pos, 0, content))
+            .unwrap();
     }
 
     fn get_filesize(&self) -> usize {
@@ -226,7 +239,8 @@ impl UpstreamTextCRDT for (yrs::Doc, TextRef) {
 
     fn local_del(&mut self, range: Range<usize>) {
         let mut txn = self.0.transact_mut();
-        self.1.remove_range(&mut txn, range.start as u32, range.len() as u32);
+        self.1
+            .remove_range(&mut txn, range.start as u32, range.len() as u32);
         txn.commit();
     }
 
@@ -234,6 +248,28 @@ impl UpstreamTextCRDT for (yrs::Doc, TextRef) {
         let mut txn = self.0.transact_mut();
         self.1.insert(&mut txn, pos as u32, content);
         txn.commit();
+    }
+}
+
+impl UpstreamTextCRDT for (loro::LoroDoc, loro::LoroText) {
+    fn new() -> Self {
+        let doc = LoroDoc::new();
+        let text = doc.get_text("text");
+        (doc, text)
+    }
+
+    fn name() -> &'static str {
+        "loro"
+    }
+
+    fn local_del(&mut self, range: Range<usize>) {
+        self.1.delete(range.start, range.len()).unwrap();
+        self.0.commit();
+    }
+
+    fn local_ins(&mut self, pos: usize, content: &str) {
+        self.1.insert(pos, content);
+        self.0.commit();
     }
 }
 
@@ -345,6 +381,7 @@ pub fn local_benchmarks(c: &mut Criterion) {
     benchmark_algorithm::<(DTCRDT, u16)>(c);
     benchmark_algorithm::<DT>(c);
     benchmark_algorithm::<AutomergeCRDT>(c);
+    benchmark_algorithm::<(loro::LoroDoc, loro::LoroText)>(c);
     // benchmark_algorithm::<AutomergeCRDT2>(c);
     // group.bench_with_input("automerge2",&test_data, bench_crdt::<AutomergeCRDT2>);
 
