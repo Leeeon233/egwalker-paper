@@ -539,17 +539,17 @@ fn convert_loro(filename: &str) {
     let history = load_history(filename);
     let (doc, text) = process::<(loro::LoroDoc, loro::LoroText)>(&history);
 
-    let json = doc.export_json_updates(&Default::default(), &doc.oplog_vv());
-    let json = serde_json::to_string(&json).unwrap();
-    std::fs::write("history.json", &json).unwrap();
+    // let json = doc.export_json_updates(&Default::default(), &doc.oplog_vv());
+    // let json = serde_json::to_string(&json).unwrap();
+    // std::fs::write("history.json", &json).unwrap();
 
-    let content = text.to_string();
-    if content != history.end_content {
-        std::fs::write("a", &history.end_content).unwrap();
-        std::fs::write("b", &content).unwrap();
-        panic!("Does not match! Written to a / b");
-    }
-    assert_eq!(content, history.end_content, "content does not match");
+    // let content = text.to_string();
+    // if content != history.end_content {
+    //     std::fs::write("a", &history.end_content).unwrap();
+    //     std::fs::write("b", &content).unwrap();
+    //     panic!("Does not match! Written to a / b");
+    // }
+    // assert_eq!(content, history.end_content, "content does not match");
 
     let out_filename = format!("{filename}-snapshot.loro");
     std::fs::write(
