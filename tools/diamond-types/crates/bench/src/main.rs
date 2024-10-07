@@ -3,14 +3,14 @@
 use std::env;
 use std::path::PathBuf;
 
-use criterion::{BenchmarkId, black_box, Criterion, Throughput};
+use criterion::{black_box, BenchmarkId, Criterion, Throughput};
 use jumprope::{JumpRope, JumpRopeBuf};
 
 use crdt_testdata::{load_testing_data, TestData};
-use diamond_types::list::{ListCRDT, ListOpLog};
 use diamond_types::list::encoding::*;
 use diamond_types::list::op_metrics::ListOpMetrics;
 use diamond_types::list::operation::ListOpKind;
+use diamond_types::list::{ListCRDT, ListOpLog};
 use diamond_types::listmerge::merge::{reverse_str, TransformedResultRaw};
 use diamond_types::rle::KVPair;
 
@@ -19,8 +19,8 @@ use crate::utils::*;
 // This benchmark interacts with the automerge-perf data set from here:
 // https://github.com/automerge/automerge-perf/
 // mod testdata;
-mod utils;
 mod idxtrace;
+mod utils;
 
 fn testing_data(name: &str) -> TestData {
     let filename = format!("benchmark_data/{}.json.gz", name);
@@ -28,8 +28,22 @@ fn testing_data(name: &str) -> TestData {
 }
 
 // const LINEAR_DATASETS: &[&str] = &["automerge-paper", "rustcode", "sveltecomponent", "seph-blog1", "friendsforever_flat"];
-const LINEAR_DATASETS: &[&str] = &["automerge-paper", "seph-blog1", "clownschool_flat", "friendsforever_flat", "egwalker"];
-const COMPLEX_DATASETS: &[&str] = &["automerge-paper", "seph-blog1", "egwalker", "node_nodecc", "git-makefile", "friendsforever", "clownschool"];
+const LINEAR_DATASETS: &[&str] = &[
+    "automerge-paper",
+    "seph-blog1",
+    "clownschool_flat",
+    "friendsforever_flat",
+    "egwalker",
+];
+const COMPLEX_DATASETS: &[&str] = &[
+    "automerge-paper",
+    "seph-blog1",
+    "egwalker",
+    "node_nodecc",
+    "git-makefile",
+    "friendsforever",
+    "clownschool",
+];
 
 const PAPER_DATASETS: &[&str] = &["S1", "S2", "S3", "C1", "C2", "A1", "A2"];
 
@@ -155,7 +169,7 @@ fn encoding_nodecc_benchmarks(c: &mut Criterion) {
                 black_box(branch);
             });
         });
-        
+
         group.bench_function(BenchmarkId::new("merge_old", name), |b| {
             b.iter(|| {
                 let branch = oplog.checkout_tip_old();
@@ -185,7 +199,9 @@ fn apply_op_at(r: &mut JumpRopeBuf, oplog: &ListOpLog, op: ListOpMetrics) {
     // let xf_pos = op.loc.span.start;
     match op.kind {
         ListOpKind::Ins => {
-            let content = oplog.operation_ctx.get_str(ListOpKind::Ins, op.content_pos.unwrap());
+            let content = oplog
+                .operation_ctx
+                .get_str(ListOpKind::Ins, op.content_pos.unwrap());
             // assert!(pos <= self.content.len_chars());
             if op.loc.fwd {
                 r.insert(op.loc.span.start, content);
@@ -202,7 +218,9 @@ fn apply_op_at(r: &mut JumpRopeBuf, oplog: &ListOpLog, op: ListOpMetrics) {
 }
 
 fn doc_from_iter<I>(oplog: &ListOpLog, iter: I) -> JumpRopeBuf
-where I: Iterator<Item=TransformedResultRaw> {
+where
+    I: Iterator<Item = TransformedResultRaw>,
+{
     let mut r = JumpRopeBuf::new();
 
     for xf in iter {
@@ -226,7 +244,11 @@ where I: Iterator<Item=TransformedResultRaw> {
 }
 
 fn stem() -> &'static str {
-    if PathBuf::from("datasets").exists() { "." } else { "../.." }
+    if PathBuf::from("datasets").exists() {
+        "."
+    } else {
+        "../.."
+    }
 }
 
 fn filename_for(trace: &str) -> String {
@@ -290,13 +312,11 @@ fn opt_load_time_benchmark(c: &mut Criterion) {
 
         group.finish();
     }
-
 }
 
 fn main() {
     // benches();
-    let mut c = Criterion::default()
-        .configure_from_args();
+    let mut c = Criterion::default().configure_from_args();
 
     // c.bench_function("count_ones", |b| {
     //     let mut n: u128 = 0;

@@ -1,10 +1,10 @@
 pub mod nonlinear;
 
 // use std::time::SystemTime;
-use std::fs::File;
-use std::io::{BufReader, Read};
 use flate2::bufread::GzDecoder;
 use serde::Deserialize;
+use std::fs::File;
+use std::io::{BufReader, Read};
 
 /// This file contains some simple helpers for loading test data. Its used by benchmarking and
 /// testing code.
@@ -16,7 +16,7 @@ pub struct TestPatch(pub usize, pub usize, pub String);
 #[derive(Debug, Clone, Deserialize)]
 pub struct TestTxn {
     // time: String, // ISO String. Unused.
-    pub patches: Vec<TestPatch>
+    pub patches: Vec<TestPatch>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -31,17 +31,14 @@ pub struct TestData {
 
 impl TestData {
     pub fn len(&self) -> usize {
-        self.txns.iter()
-            .map(|txn| { txn.patches.len() })
-            .sum::<usize>()
+        self.txns.iter().map(|txn| txn.patches.len()).sum::<usize>()
     }
 
     pub fn len_keystrokes(&self) -> usize {
-        self.txns.iter()
-            .flat_map(|txn| { txn.patches.iter() })
-            .map(|TestPatch(_pos, del, ins)| {
-                *del + ins.chars().count()
-            })
+        self.txns
+            .iter()
+            .flat_map(|txn| txn.patches.iter())
+            .map(|TestPatch(_pos, del, ins)| *del + ins.chars().count())
             .sum()
     }
 
@@ -60,7 +57,7 @@ pub fn load_testing_data(filename: &str) -> TestData {
     // We could pass the GzDecoder straight to serde, but it makes it way slower to parse for
     // some reason.
     let mut reader = GzDecoder::new(reader);
-    let mut raw_json = vec!();
+    let mut raw_json = vec![];
     reader.read_to_end(&mut raw_json).unwrap();
 
     // println!("uncompress time {}", start.elapsed().unwrap().as_millis());

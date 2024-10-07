@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use argh::FromArgs;
+use convert1::{bench_loro_remote, convert_main};
 use std::collections::BTreeMap;
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -49,6 +50,10 @@ pub fn am_filename_for(trace: &str) -> String {
 
 pub fn yjs_filename_for(trace: &str) -> String {
     format!("{}/datasets/{trace}.yjs", stem())
+}
+
+pub fn loro_filename_for(trace: &str) -> String {
+    format!("{}/datasets/{trace}-snapshot.loro", stem())
 }
 
 // $ cargo run --features memusage --release
@@ -140,9 +145,11 @@ fn bench_main() {
         bench_automerge_remote(&mut c);
 
         bench_yrs_remote(&mut c);
+
+        bench_loro_remote(&mut c);
         // bench_ff(&mut c);
 
-        benchmarks::local_benchmarks(&mut c);
+        // benchmarks::local_benchmarks(&mut c);
 
         c.final_summary();
 
@@ -151,7 +158,10 @@ fn bench_main() {
 }
 
 pub fn linear_testing_data(name: &str) -> TestData {
-    let filename = format!("../../editing-traces/sequential_traces/{}.json.gz", name);
+    let filename = format!(
+        "/Users/leon/code/editing-traces/sequential_traces/{}.json.gz",
+        name
+    );
     load_testing_data(&filename)
 }
 
@@ -170,8 +180,8 @@ struct Cfg {
 }
 
 fn main() {
-    // convert_main()
-    bench_main()
+    convert_main();
+    // bench_main()
     // get_cola_stats()
     //
     // #[cfg(feature = "memusage")]

@@ -3,7 +3,7 @@ use automerge::{AutoCommit, Automerge, ObjType};
 use crdt_testdata::{TestData, TestPatch};
 #[cfg(feature = "bench")]
 use criterion::{Bencher, BenchmarkId, Criterion, Throughput};
-use diamond_types::list::encoding::ENCODE_FULL;
+use diamond_types::list::encoding::{EncodeOptions, ENCODE_FULL};
 use diamond_types::list::ListOpLog;
 use diamond_types::AgentId;
 use diamond_types_crdt::list::ListCRDT as DTCRDT;
@@ -19,7 +19,7 @@ pub const LINEAR_DATASETS: &[&str] = &[
     "seph-blog1",
     "friendsforever_flat",
     "clownschool_flat",
-    "egwalker",
+    // "egwalker",
 ];
 // pub const LINEAR_DATASETS: &[&str] = &["automerge-paper", "rustcode", "sveltecomponent", "seph-blog1", "friendsforever_flat", "clownschool_flat"];
 
@@ -116,15 +116,28 @@ impl UpstreamTextCRDT for DT {
     }
 }
 
+// impl DownstreamCRDT for DT {
+//     type Data = ListOpLog;
+
+//     fn get_data(&self) -> Self::Data {
+//         self.0.clone()
+//     }
+
+//     fn process(data: &Self::Data) {
+//         black_box(data.checkout_tip().content());
+//     }
+// }
+
 impl DownstreamCRDT for DT {
-    type Data = ListOpLog;
+    type Data = Vec<u8>;
 
     fn get_data(&self) -> Self::Data {
-        self.0.clone()
+        self.0.encode(&EncodeOptions::default())
     }
 
     fn process(data: &Self::Data) {
-        black_box(data.checkout_tip().content());
+        let mut doc = ListOpLog::new();
+        black_box(doc.decode_and_add(data));
     }
 }
 
@@ -271,6 +284,24 @@ impl UpstreamTextCRDT for (loro::LoroDoc, loro::LoroText) {
         self.1.insert(pos, content);
         self.0.commit();
     }
+
+    fn get_filesize(&self) -> usize {
+        self.0.export(loro::ExportMode::Snapshot).unwrap().len()
+    }
+}
+
+impl DownstreamCRDT for (loro::LoroDoc, loro::LoroText) {
+    type Data = Vec<u8>;
+
+    fn get_data(&self) -> Self::Data {
+        self.0.export(loro::ExportMode::Snapshot).unwrap()
+    }
+
+    fn process(data: &Self::Data) {
+        let doc = loro::LoroDoc::new();
+        doc.import(data).unwrap();
+        black_box(doc);
+    }
 }
 
 // impl UpstreamTextCRDT for cola::Replica {
@@ -378,10 +409,10 @@ pub fn local_benchmarks(c: &mut Criterion) {
         group.finish();
     }
 
-    benchmark_algorithm::<(DTCRDT, u16)>(c);
-    benchmark_algorithm::<DT>(c);
-    benchmark_algorithm::<AutomergeCRDT>(c);
-    benchmark_algorithm::<(loro::LoroDoc, loro::LoroText)>(c);
+    // benchmark_algorithm::<(DTCRDT, u16)>(c);
+    // benchmark_algorithm::<DT>(c);
+    // benchmark_algorithm::<AutomergeCRDT>(c);
+    // benchmark_algorithm::<(loro::LoroDoc, loro::LoroText)>(c);
     // benchmark_algorithm::<AutomergeCRDT2>(c);
     // group.bench_with_input("automerge2",&test_data, bench_crdt::<AutomergeCRDT2>);
 
@@ -390,69 +421,117 @@ pub fn local_benchmarks(c: &mut Criterion) {
 
     // benchmark_algorithm::<YrsCRDT>(c); // This is super slow.
 
-    // for name in LINEAR_DATASETS {
-    //     let mut local = c.benchmark_group(format!("local/{name}"));
-    //     let test_data = crate::linear_testing_data(name);
-    //     assert_eq!(test_data.start_content.len(), 0);
-    //
-    //     local.throughput(Throughput::Elements(test_data.len() as u64));
-    //
-    //     local.bench_with_input("dt-crdt", &test_data, bench_local::<(DTCRDT, u16)>);
-    //     local.bench_with_input("dt", &test_data, bench_local::<DT>);
-    //     local.bench_with_input("automerge", &test_data, bench_local::<AutomergeCRDT>);
-    //     // group.bench_with_input("automerge2",&test_data, bench_crdt::<AutomergeCRDT2>);
-    //     local.bench_with_input("yrs", &test_data, bench_local::<YrsCRDT>);
-    //     local.bench_with_input("cola", &test_data, bench_local::<cola::Replica>);
-    //     local.bench_with_input("cola-nocursor", &test_data, bench_local::<cola_nocursor::Replica>);
-    //
-    //     local.finish();
-    //
-    //
-    //     // let mut remote = c.benchmark_group(format!("remote/{name}"));
-    //     // remote.bench_with_input("dt-crdt", &test_data, bench_remote::<(DTCRDT, u16)>);
-    //     // remote.bench_with_input("dt", &test_data, bench_remote::<DT>);
-    //     // remote.bench_with_input("automerge", &test_data, bench_remote::<AutomergeCRDT>);
-    //     // remote.bench_with_input("cola", &test_data, bench_remote::<cola::Replica>);
-    //     //
-    //     // remote.finish();
-    // }
+    for name in LINEAR_DATASETS {
+        let test_data = crate::linear_testing_data(name);
+        assert_eq!(test_data.start_content.len(), 0);
+        // let mut local = c.benchmark_group(format!("local/{name}"));
+
+        // local.throughput(Throughput::Elements(test_data.len() as u64));
+
+        // local.bench_with_input("dt-crdt", &test_data, bench_local::<(DTCRDT, u16)>);
+        // local.bench_with_input("dt", &test_data, bench_local::<DT>);
+        // local.bench_with_input("automerge", &test_data, bench_local::<AutomergeCRDT>);
+        // // group.bench_with_input("automerge2",&test_data, bench_crdt::<AutomergeCRDT2>);
+        // local.bench_with_input("yrs", &test_data, bench_local::<YrsCRDT>);
+        // local.bench_with_input(
+        //     "loro",
+        //     &test_data,
+        //     bench_local::<(loro::LoroDoc, loro::LoroText)>,
+        // );
+        // // local.bench_with_input("cola", &test_data, bench_local::<cola::Replica>);
+        // // local.bench_with_input(
+        // //     "cola-nocursor",
+        // //     &test_data,
+        // //     bench_local::<cola_nocursor::Replica>,
+        // // );
+
+        // local.finish();
+        //
+        //
+        let mut remote = c.benchmark_group(format!("remote/{name}"));
+        remote.bench_with_input("dt-crdt", &test_data, bench_remote::<(DTCRDT, u16)>);
+        remote.bench_with_input("dt", &test_data, bench_remote::<DT>);
+        remote.bench_with_input("automerge", &test_data, bench_remote::<AutomergeCRDT>);
+        remote.bench_with_input(
+            "loro",
+            &test_data,
+            bench_remote::<(loro::LoroDoc, loro::LoroText)>,
+        );
+        // remote.bench_with_input("cola", &test_data, bench_remote::<cola::Replica>);
+
+        remote.finish();
+    }
+    print_filesize();
+    print_memusage();
 }
 
-// pub fn print_filesize() {
-//     for name in LINEAR_DATASETS {
-//         let test_data = crate::linear_testing_data(name);
+pub fn print_filesize() {
+    for name in LINEAR_DATASETS {
+        let test_data = crate::linear_testing_data(name);
+
+        println!(
+            "am size for {name}: {}",
+            get_filesize::<AutomergeCRDT>(&test_data)
+        );
+        println!(
+            "am2 size for {name}: {}",
+            get_filesize::<AutomergeCRDT2>(&test_data)
+        );
+        println!("dt size for {name}: {}", get_filesize::<DT>(&test_data));
+        println!(
+            "dt-crdt size for {name}: {}",
+            get_filesize::<(DTCRDT, u16)>(&test_data)
+        );
+        println!(
+            "loro size for {name}: {}",
+            get_filesize::<(loro::LoroDoc, loro::LoroText)>(&test_data)
+        );
+        println!();
+    }
+}
 //
-//         println!("am size for {name}: {}", get_filesize::<AutomergeCRDT>(&test_data));
-//         println!("am2 size for {name}: {}", get_filesize::<AutomergeCRDT2>(&test_data));
-//         println!("dt size for {name}: {}", get_filesize::<DT>(&test_data));
-//         println!("dt-crdt size for {name}: {}", get_filesize::<(DTCRDT, u16)>(&test_data));
-//         println!();
-//     }
-// }
 //
+fn get_memusage<C: UpstreamTextCRDT>(data: &TestData) -> usize {
+    let before_usage = get_thread_memory_usage();
+    let mut crdt = C::new();
+    apply_local_patches(&mut crdt, data);
+    let after_usage = get_thread_memory_usage();
+
+    // println!("Memory usage: {}", after_usage - before_usage);
+    after_usage - before_usage
+}
 //
-// fn get_memusage<C: UpstreamTextCRDT>(data: &TestData) -> isize {
-//     let before_usage = get_thread_memory_usage();
-//     let mut crdt = C::new();
-//     apply_local_patches(&mut crdt, data);
-//     let after_usage = get_thread_memory_usage();
-//
-//     // println!("Memory usage: {}", after_usage - before_usage);
-//     after_usage - before_usage
-// }
-//
-// pub fn print_memusage() {
-//     for name in LINEAR_DATASETS {
-//         let test_data = crate::linear_testing_data(name);
-//
-//         println!("am memory usage for {name}: {}", get_memusage::<AutomergeCRDT>(&test_data));
-//         println!("am2 memory usage for {name}: {}", get_memusage::<AutomergeCRDT2>(&test_data));
-//         println!("dt memory usage for {name}: {}", get_memusage::<DT>(&test_data));
-//         println!("dt-crdt memory usage for {name}: {}", get_memusage::<(DTCRDT, u16)>(&test_data));
-//         println!("cola memory usage for {name}: {}", get_memusage::<cola::Replica>(&test_data));
-//         println!();
-//         // get_memusage::<AutomergeCRDT>(&test_data);
-//         // get_memusage::<DT>(&test_data);
-//         // get_memusage::<(DTCRDT, u16)>(&test_data);
-//     }
-// }
+pub fn print_memusage() {
+    for name in LINEAR_DATASETS {
+        let test_data = crate::linear_testing_data(name);
+
+        println!(
+            "am memory usage for {name}: {}",
+            get_memusage::<AutomergeCRDT>(&test_data)
+        );
+        println!(
+            "am2 memory usage for {name}: {}",
+            get_memusage::<AutomergeCRDT2>(&test_data)
+        );
+        println!(
+            "dt memory usage for {name}: {}",
+            get_memusage::<DT>(&test_data)
+        );
+        println!(
+            "dt-crdt memory usage for {name}: {}",
+            get_memusage::<(DTCRDT, u16)>(&test_data)
+        );
+        println!(
+            "loro memory usage for {name}: {}",
+            get_memusage::<(loro::LoroDoc, loro::LoroText)>(&test_data)
+        );
+        // println!(
+        //     "cola memory usage for {name}: {}",
+        //     get_memusage::<cola::Replica>(&test_data)
+        // );
+        println!();
+        // get_memusage::<AutomergeCRDT>(&test_data);
+        // get_memusage::<DT>(&test_data);
+        // get_memusage::<(DTCRDT, u16)>(&test_data);
+    }
+}

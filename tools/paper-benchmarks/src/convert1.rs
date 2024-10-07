@@ -1,5 +1,7 @@
 #![allow(unused_imports)]
 
+use automerge::transaction::Transactable;
+use automerge::{ActorId, AutoCommit, Automerge, ObjType, ReadDoc};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
@@ -7,22 +9,22 @@ use std::fs::File;
 use std::hint::black_box;
 use std::io::BufReader;
 use std::ops::Range;
-use automerge::{ActorId, AutoCommit, Automerge, ObjType, ReadDoc};
-use automerge::transaction::Transactable;
 // use cola::Replica;
+use crate::{am_filename_for, yjs_filename_for};
 #[cfg(feature = "bench")]
 use criterion::{BenchmarkId, Criterion};
 use diamond_types_crdt::list::ListCRDT;
 use jumprope::JumpRopeBuf;
-use rand::Rng;
 use rand::rngs::SmallRng;
+use rand::Rng;
 use serde::Deserialize;
 use smallvec::SmallVec;
 use smartstring::alias::String as SmartString;
-use yrs::{GetString, OffsetKind, Options, ReadTxn, StateVector, Text, TextRef, Transact, Update, Uuid};
 use yrs::block::ClientID;
 use yrs::updates::decoder::Decode;
-use crate::{am_filename_for, yjs_filename_for};
+use yrs::{
+    GetString, OffsetKind, Options, ReadTxn, StateVector, Text, TextRef, Transact, Update, Uuid,
+};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,8 +47,7 @@ pub struct HistoryEntry {
     patches: SmallVec<[SimpleTextOp; 2]>,
 }
 
-
-trait TextCRDT: Clone {
+trait TextCRDT {
     fn new() -> Self;
 
     fn splice(&mut self, range: Range<usize>, ins_content: &str);
@@ -73,7 +74,9 @@ impl TextCRDT for AutomergeCRDT {
     fn new() -> Self {
         let mut doc = AutoCommit::new();
         doc.set_actor(ActorId::from(&[0xff])); // We'll make the root object with a dummy "root" ActorId
-        let id = doc.put_object(automerge::ROOT, "text", ObjType::Text).unwrap();
+        let id = doc
+            .put_object(automerge::ROOT, "text", ObjType::Text)
+            .unwrap();
         (doc, id)
     }
 
@@ -84,7 +87,9 @@ impl TextCRDT for AutomergeCRDT {
         // }
         range.start = range.start.min(len);
         range.end = range.end.min(len);
-        self.0.splice_text(&self.1, range.start, range.len() as _, ins_content).unwrap();
+        self.0
+            .splice_text(&self.1, range.start, range.len() as _, ins_content)
+            .unwrap();
     }
 
     fn merge_from(&mut self, other: &Self) {
@@ -107,7 +112,6 @@ impl TextCRDT for AutomergeCRDT {
         self.0.set_actor(am_agent_for_agentid(agent));
     }
 }
-
 
 fn to_yjs_agent(agent: usize) -> ClientID {
     // Yjs's ClientID is a u64.
@@ -139,33 +143,41 @@ impl TextCRDT for YrsCRDT {
         let mut txn = self.0.transact_mut();
 
         let len = self.1.get_string(&txn).chars().count();
-        if range.start > len { range.start = len; }
-        if range.end > len { range.end = len; }
+        if range.start > len {
+            range.start = len;
+        }
+        if range.end > len {
+            range.end = len;
+        }
 
         if !range.is_empty() {
-            self.1.remove_range(&mut txn, range.start as u32, range.len() as u32);
+            self.1
+                .remove_range(&mut txn, range.start as u32, range.len() as u32);
         }
         if !ins_content.is_empty() {
             let mut ok = true;
             for c in ins_content.chars() {
                 if c.len_utf16() != 1 {
-                    println!("Non-UTF16 safe character found '{}' - replacing with underscore", c);
+                    println!(
+                        "Non-UTF16 safe character found '{}' - replacing with underscore",
+                        c
+                    );
                     ok = false;
                 }
             }
             if ok {
                 self.1.insert(&mut txn, range.start as u32, ins_content);
             } else {
-                let replaced_content = ins_content.chars().map(|c| {
-                    if c.len_utf16() == 1 { c }
-                    else { '_' }
-                }).collect::<String>();
-                self.1.insert(&mut txn, range.start as u32, &replaced_content);
+                let replaced_content = ins_content
+                    .chars()
+                    .map(|c| if c.len_utf16() == 1 { c } else { '_' })
+                    .collect::<String>();
+                self.1
+                    .insert(&mut txn, range.start as u32, &replaced_content);
             }
         }
         // self.1.inser
         txn.commit();
-
     }
 
     fn merge_from(&mut self, other: &Self) {
@@ -180,18 +192,21 @@ impl TextCRDT for YrsCRDT {
     }
 
     fn fork(&mut self, agent_hint: usize) -> Self {
-
         // Bleh I want to just call clone but then the client IDs match. And there's no way to
         // change the client ID once an object has been created.
         // let r = self.clone();
         // dbg!(self.0.client_id(), r.0.client_id());
         // r
 
-        let update = self.0.transact().encode_state_as_update_v2(&StateVector::default());
+        let update = self
+            .0
+            .transact()
+            .encode_state_as_update_v2(&StateVector::default());
 
         let opts = yrs_opts(Some(agent_hint));
         let doc2 = yrs::Doc::with_options(opts);
-        doc2.transact_mut().apply_update(Update::decode_v2(&update).unwrap());
+        doc2.transact_mut()
+            .apply_update(Update::decode_v2(&update).unwrap());
         let r = doc2.get_or_insert_text("text");
 
         (doc2, r)
@@ -216,7 +231,6 @@ fn random_str(len: usize) -> String {
     }
     str
 }
-
 
 type DTCRDT = (ListCRDT, u16);
 impl TextCRDT for DTCRDT {
@@ -272,7 +286,6 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
     let mut doc_at_idx: HashMap<usize, (C, usize)> = HashMap::new();
     doc_at_idx.insert(usize::MAX, (doc, num_roots));
 
-
     fn borrow_doc<C: TextCRDT>(doc_at_idx: &HashMap<usize, (C, usize)>, idx: usize) -> &C {
         &doc_at_idx.get(&idx).unwrap().0
     }
@@ -285,7 +298,11 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
         }
     }
 
-    fn take_doc<C: TextCRDT>(doc_at_idx: &mut HashMap<usize, (C, usize)>, agent: usize, idx: usize) -> C {
+    fn take_doc<C: TextCRDT>(
+        doc_at_idx: &mut HashMap<usize, (C, usize)>,
+        agent: usize,
+        idx: usize,
+    ) -> C {
         let (parent_doc, retains) = doc_at_idx.get_mut(&idx).unwrap();
         if *retains == 1 {
             // We'll just take the document.
@@ -309,7 +326,9 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
     let dot_every = (len / 30) + 1;
 
     for (idx, entry) in history.txns.iter().enumerate() {
-        if idx % dot_every == 0 { eprint!("."); }
+        if idx % dot_every == 0 {
+            eprint!(".");
+        }
 
         // First we need to get the doc we're editing.
         let (&first_p, rest_p) = entry.parents.split_first().unwrap_or((&usize::MAX, &[]));
@@ -337,10 +356,9 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
         // let actor = ActorId::from(actor_bytes);
         // doc.set_actor(actor);
 
-
         // Ok, now modify the document.
         for op in &entry.patches {
-            doc.splice(op.0 .. op.0 + op.1, &op.2);
+            doc.splice(op.0..op.0 + op.1, &op.2);
             // doc.splice_text(text_id.clone(), op.0, op.1 as isize, &op.2).unwrap();
         }
 
@@ -379,9 +397,7 @@ const DATASETS: &[&str] = &["S1", "S2", "S3", "C1", "C2", "A1", "A2"];
 
 #[cfg(feature = "bench")]
 pub fn bench_automerge_remote(c: &mut Criterion) {
-
     for &name in DATASETS {
-
         let mut group = c.benchmark_group("automerge");
 
         // let name = "friendsforever";
@@ -398,18 +414,19 @@ pub fn bench_automerge_remote(c: &mut Criterion) {
                         black_box(result);
                     })
                 });
-            },
+            }
             Err(err) => {
-                eprintln!("Error: Could not load data for test {:?}: {:?}", filename, err);
+                eprintln!(
+                    "Error: Could not load data for test {:?}: {:?}",
+                    filename, err
+                );
             }
         }
     }
 }
 
-
 #[cfg(feature = "bench")]
 pub fn bench_yrs_remote(c: &mut Criterion) {
-
     for &name in DATASETS {
         let mut group = c.benchmark_group("yrs");
 
@@ -437,32 +454,27 @@ pub fn bench_yrs_remote(c: &mut Criterion) {
 
 #[cfg(feature = "bench")]
 pub fn bench_loro_remote(c: &mut Criterion) {
+    use crate::loro_filename_for;
 
     for &name in DATASETS {
-        let mut group = c.benchmark_group("yrs");
+        let mut group = c.benchmark_group("loro");
 
         // let name = "friendsforever";
-        let filename = yjs_filename_for(name);
+        let filename = loro_filename_for(name);
         let bytes = std::fs::read(&filename).unwrap();
         group.bench_function(BenchmarkId::new("remote", name), |b| {
             b.iter(|| {
-                let mut doc = yrs::Doc::new();
-                let update = yrs::Update::decode_v2(&bytes).unwrap();
-                {
-                    let mut txn = doc.transact_mut();
-                    txn.apply_update(update);
-                    txn.commit();
-                }
+                let mut doc = loro::LoroDoc::new();
+                doc.import(&bytes).unwrap();
 
-                let text_ref = doc.get_or_insert_text("text");
-                let text = text_ref.get_string(&doc.transact());
+                let text = doc.get_text("text");
+                let text = text.to_string();
 
                 black_box((doc, text));
             })
         });
     }
 }
-
 
 fn convert_automerge(filename: &str) {
     println!("Processing {filename}...");
@@ -479,9 +491,11 @@ fn convert_automerge(filename: &str) {
     std::fs::write(&out_filename, saved).unwrap();
     println!("Saved to {out_filename}");
 
-
     let saved_nocompress = doc.save_nocompress();
-    println!("automerge uncompressed document size to {} bytes", saved_nocompress.len());
+    println!(
+        "automerge uncompressed document size to {} bytes",
+        saved_nocompress.len()
+    );
 
     let out_filename = format!("{filename}-uncompressed.am");
     std::fs::write(&out_filename, saved_nocompress).unwrap();
@@ -511,17 +525,92 @@ fn convert_yjs(filename: &str) {
     assert_eq!(content, history.end_content, "content does not match");
 
     let out_filename = format!("{filename}.yjs");
-    std::fs::write(&out_filename, doc.transact().encode_state_as_update_v2(&StateVector::default())).unwrap();
+    std::fs::write(
+        &out_filename,
+        doc.transact()
+            .encode_state_as_update_v2(&StateVector::default()),
+    )
+    .unwrap();
     println!("Saved to {out_filename}");
 }
 
+fn convert_loro(filename: &str) {
+    println!("Processing {filename}...");
+    let history = load_history(filename);
+    let (doc, text) = process::<(loro::LoroDoc, loro::LoroText)>(&history);
+
+    let json = doc.export_json_updates(&Default::default(), &doc.oplog_vv());
+    let json = serde_json::to_string(&json).unwrap();
+    std::fs::write("history.json", &json).unwrap();
+
+    let content = text.to_string();
+    if content != history.end_content {
+        std::fs::write("a", &history.end_content).unwrap();
+        std::fs::write("b", &content).unwrap();
+        panic!("Does not match! Written to a / b");
+    }
+    assert_eq!(content, history.end_content, "content does not match");
+
+    let out_filename = format!("{filename}-snapshot.loro");
+    std::fs::write(
+        &out_filename,
+        doc.export(loro::ExportMode::Snapshot).unwrap(),
+    )
+    .unwrap();
+    println!("Saved to {out_filename}");
+}
+
+impl TextCRDT for (loro::LoroDoc, loro::LoroText) {
+    fn new() -> Self {
+        let doc = loro::LoroDoc::new();
+        let text = doc.get_text("text");
+        (doc, text)
+    }
+
+    fn splice(&mut self, mut range: Range<usize>, ins_content: &str) {
+        let len = self.1.to_string().chars().count();
+        if range.start > len {
+            range.start = len;
+        }
+        if range.end > len {
+            range.end = len;
+        }
+
+        self.1.splice(range.start, range.len(), ins_content);
+        self.0.commit();
+    }
+
+    fn merge_from(&mut self, other: &Self) {
+        let update = other.0.export(loro::ExportMode::snapshot()).unwrap();
+        self.0.import(&update).unwrap();
+    }
+
+    fn fork(&mut self, actor_hint: usize) -> Self {
+        let doc = self.0.fork();
+        doc.set_peer_id(actor_hint as u64);
+        let text = doc.get_text("text");
+        (doc, text)
+    }
+
+    fn set_agent(&mut self, actor: usize) {
+        self.0.set_peer_id(actor as u64);
+    }
+}
+
 pub fn convert_main() {
+    // convert_loro("S1");
+    // convert_loro("S2");
+    // convert_loro("S3");
+    // convert_loro("C1");
+    // convert_loro("C2");
+    // convert_loro("A1");
+    convert_loro("A2");
+
     // convert_yjs("automerge-paper");
     // convert_yjs("seph-blog1");
     // convert_yjs("friendsforever");
     // convert_yjs("clownschool");
     // convert_yjs("egwalker");
-
 
     // convert_cola("S1");
     // convert_cola("S2");
@@ -530,7 +619,6 @@ pub fn convert_main() {
     // convert_cola("C2");
     // convert_cola("A1");
     // convert_cola("A2");
-
 
     // run_automerge("automerge-paper");
     // run_automerge("seph-blog1");
