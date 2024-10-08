@@ -180,8 +180,8 @@ struct Cfg {
 }
 
 fn main() {
-    // convert_main();
-    bench_main()
+    convert_main();
+    // bench_main()
     // get_cola_stats()
     //
     // #[cfg(feature = "memusage")]

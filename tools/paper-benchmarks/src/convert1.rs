@@ -544,13 +544,13 @@ fn convert_loro(filename: &str) {
     // let json = serde_json::to_string(&json).unwrap();
     // std::fs::write("history.json", &json).unwrap();
 
-    // let content = text.to_string();
-    // if content != history.end_content {
-    //     std::fs::write("a", &history.end_content).unwrap();
-    //     std::fs::write("b", &content).unwrap();
-    //     panic!("Does not match! Written to a / b");
-    // }
-    // assert_eq!(content, history.end_content, "content does not match");
+    let content = text.to_string();
+    if content != history.end_content {
+        std::fs::write("a", &history.end_content).unwrap();
+        std::fs::write("b", &content).unwrap();
+        panic!("Does not match! Written to a / b");
+    }
+    assert_eq!(content, history.end_content, "content does not match");
 
     let out_filename = format!("{filename}-updates.loro");
     std::fs::write(
@@ -608,8 +608,8 @@ pub fn convert_main() {
     // convert_loro("S1");
     // convert_loro("S2");
     // convert_loro("S3");
-    // convert_loro("C1");
-    // convert_loro("C2");
+    convert_loro("C1");
+    convert_loro("C2");
     // convert_loro("A1");
     // convert_loro("A2");
 
