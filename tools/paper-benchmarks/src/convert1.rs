@@ -2,6 +2,7 @@
 
 use automerge::transaction::Transactable;
 use automerge::{ActorId, AutoCommit, Automerge, ObjType, ReadDoc};
+use loro::{ExportMode, LoroDoc};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
@@ -551,10 +552,10 @@ fn convert_loro(filename: &str) {
     // }
     // assert_eq!(content, history.end_content, "content does not match");
 
-    let out_filename = format!("{filename}-snapshot.loro");
+    let out_filename = format!("{filename}-updates.loro");
     std::fs::write(
         &out_filename,
-        doc.export(loro::ExportMode::Snapshot).unwrap(),
+        doc.export(loro::ExportMode::all_updates()).unwrap(),
     )
     .unwrap();
     println!("Saved to {out_filename}");
@@ -586,7 +587,13 @@ impl TextCRDT for (loro::LoroDoc, loro::LoroText) {
     }
 
     fn fork(&mut self, actor_hint: usize) -> Self {
-        let doc = self.0.fork();
+        let doc = {
+            // let doc = LoroDoc::new();
+            // doc.import(&self.0.export(ExportMode::snapshot()).unwrap())
+            //     .unwrap();
+            // doc
+            self.0.fork()
+        };
         doc.set_peer_id(actor_hint as u64);
         let text = doc.get_text("text");
         (doc, text)
@@ -604,7 +611,7 @@ pub fn convert_main() {
     // convert_loro("C1");
     // convert_loro("C2");
     // convert_loro("A1");
-    convert_loro("A2");
+    // convert_loro("A2");
 
     // convert_yjs("automerge-paper");
     // convert_yjs("seph-blog1");

@@ -53,7 +53,7 @@ pub fn yjs_filename_for(trace: &str) -> String {
 }
 
 pub fn loro_filename_for(trace: &str) -> String {
-    format!("{}/datasets/{trace}-snapshot.loro", stem())
+    format!("{}/datasets/{trace}-updates.loro", stem())
 }
 
 // $ cargo run --features memusage --release
@@ -142,9 +142,9 @@ fn bench_main() {
         let mut c = Criterion::default().configure_from_args();
 
         // bench_cola_remote(&mut c);
-        bench_automerge_remote(&mut c);
+        // bench_automerge_remote(&mut c);
 
-        bench_yrs_remote(&mut c);
+        // bench_yrs_remote(&mut c);
 
         bench_loro_remote(&mut c);
         // bench_ff(&mut c);
