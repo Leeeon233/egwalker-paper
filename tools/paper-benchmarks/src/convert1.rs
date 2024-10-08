@@ -2,6 +2,7 @@
 
 use automerge::transaction::Transactable;
 use automerge::{ActorId, AutoCommit, Automerge, ObjType, ReadDoc};
+use dev_utils::get_mem_usage;
 use loro::{ExportMode, LoroDoc};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -10,6 +11,7 @@ use std::fs::File;
 use std::hint::black_box;
 use std::io::BufReader;
 use std::ops::Range;
+use std::sync::Arc;
 // use cola::Replica;
 use crate::{am_filename_for, yjs_filename_for};
 #[cfg(feature = "bench")]
@@ -325,7 +327,6 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
     let len = history.txns.len();
     // dbg!(len);
     let dot_every = (len / 30) + 1;
-
     for (idx, entry) in history.txns.iter().enumerate() {
         if idx % dot_every == 0 {
             eprint!(".");
@@ -335,7 +336,6 @@ fn process<C: TextCRDT>(history: &EditHistory) -> C {
         let (&first_p, rest_p) = entry.parents.split_first().unwrap_or((&usize::MAX, &[]));
 
         let mut doc = take_doc(&mut doc_at_idx, entry.agent, first_p);
-
         // If there's any more parents, merge them together.
         for p in rest_p {
             let doc2 = borrow_doc(&doc_at_idx, *p);
@@ -538,13 +538,13 @@ fn convert_yjs(filename: &str) {
 fn convert_loro(filename: &str) {
     println!("Processing {filename}...");
     let history = load_history(filename);
-    let (doc, text) = process::<(loro::LoroDoc, loro::LoroText)>(&history);
+    let loro = process::<LoroCrdt>(&history);
 
     // let json = doc.export_json_updates(&Default::default(), &doc.oplog_vv());
     // let json = serde_json::to_string(&json).unwrap();
     // std::fs::write("history.json", &json).unwrap();
 
-    let content = text.to_string();
+    let content = loro.text.to_string();
     if content != history.end_content {
         std::fs::write("a", &history.end_content).unwrap();
         std::fs::write("b", &content).unwrap();
@@ -555,21 +555,33 @@ fn convert_loro(filename: &str) {
     let out_filename = format!("{filename}-updates.loro");
     std::fs::write(
         &out_filename,
-        doc.export(loro::ExportMode::all_updates()).unwrap(),
+        loro.doc.export(loro::ExportMode::all_updates()).unwrap(),
     )
     .unwrap();
     println!("Saved to {out_filename}");
 }
 
-impl TextCRDT for (loro::LoroDoc, loro::LoroText) {
+struct LoroCrdt {
+    doc: Arc<loro::LoroDoc>,
+    text: loro::LoroText,
+    frontiers: loro::Frontiers,
+}
+
+impl TextCRDT for LoroCrdt {
     fn new() -> Self {
         let doc = loro::LoroDoc::new();
         let text = doc.get_text("text");
-        (doc, text)
+        doc.set_detached_editing(true);
+        LoroCrdt {
+            doc: Arc::new(doc),
+            text,
+            frontiers: Default::default(),
+        }
     }
 
     fn splice(&mut self, mut range: Range<usize>, ins_content: &str) {
-        let len = self.1.to_string().chars().count();
+        self.doc.checkout(&self.frontiers);
+        let len = self.text.to_string().chars().count();
         if range.start > len {
             range.start = len;
         }
@@ -577,30 +589,24 @@ impl TextCRDT for (loro::LoroDoc, loro::LoroText) {
             range.end = len;
         }
 
-        self.1.splice(range.start, range.len(), ins_content);
-        self.0.commit();
+        self.text.splice(range.start, range.len(), ins_content);
+        self.frontiers = self.doc.state_frontiers();
     }
 
     fn merge_from(&mut self, other: &Self) {
-        let update = other.0.export(loro::ExportMode::snapshot()).unwrap();
-        self.0.import(&update).unwrap();
+        self.frontiers.extend_from_slice(&other.frontiers);
     }
 
     fn fork(&mut self, actor_hint: usize) -> Self {
-        let doc = {
-            // let doc = LoroDoc::new();
-            // doc.import(&self.0.export(ExportMode::snapshot()).unwrap())
-            //     .unwrap();
-            // doc
-            self.0.fork()
-        };
-        doc.set_peer_id(actor_hint as u64);
-        let text = doc.get_text("text");
-        (doc, text)
+        Self {
+            doc: Arc::clone(&self.doc),
+            text: self.doc.get_text("text"),
+            frontiers: self.frontiers.clone(),
+        }
     }
 
     fn set_agent(&mut self, actor: usize) {
-        self.0.set_peer_id(actor as u64);
+        self.doc.set_peer_id(actor as u64);
     }
 }
 

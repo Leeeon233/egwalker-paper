@@ -10,6 +10,7 @@ automerge = "0.5.11"
 yrs = "0.20.0"
 # loro = { git = "https://github.com/loro-dev/loro.git", branch = "dev" }
 loro = { path = "../../../loro/crates/loro" }
+dev-utils = { path = "../../../loro/crates/dev-utils" }
 #cola = { version = "0.4.5", features = ["encode", "serde"] }
 #cola = { path = "../../../../3rdparty/cola", features = ["encode", "serde", "stats"] }
 #cola-nocursor = { path = "../../../../3rdparty/cola", package = "cola" }
