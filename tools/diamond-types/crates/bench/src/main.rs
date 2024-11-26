@@ -247,7 +247,7 @@ fn stem() -> &'static str {
     if PathBuf::from("datasets").exists() {
         "."
     } else {
-        "../.."
+        "/Users/leon/code/egwalker-paper"
     }
 }
 

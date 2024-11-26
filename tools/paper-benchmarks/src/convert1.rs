@@ -268,7 +268,7 @@ impl TextCRDT for DTCRDT {
 }
 
 fn load_history(name: &str) -> EditHistory {
-    let filename = format!("../../datasets/{name}.json");
+    let filename = format!("/Users/leon/code/egwalker-paper/datasets/{name}.json");
     // dbg!(&filename);
     let file = BufReader::new(File::open(filename).unwrap());
     serde_json::from_reader(file).unwrap()
@@ -594,7 +594,7 @@ impl TextCRDT for LoroCrdt {
     }
 
     fn merge_from(&mut self, other: &Self) {
-        self.frontiers.extend_from_slice(&other.frontiers);
+        self.frontiers.merge_with_greater(&other.frontiers);
     }
 
     fn fork(&mut self, actor_hint: usize) -> Self {
@@ -611,13 +611,13 @@ impl TextCRDT for LoroCrdt {
 }
 
 pub fn convert_main() {
-    // convert_loro("S1");
-    // convert_loro("S2");
-    // convert_loro("S3");
+    convert_loro("S1");
+    convert_loro("S2");
+    convert_loro("S3");
     convert_loro("C1");
     convert_loro("C2");
-    // convert_loro("A1");
-    // convert_loro("A2");
+    convert_loro("A1");
+    convert_loro("A2");
 
     // convert_yjs("automerge-paper");
     // convert_yjs("seph-blog1");

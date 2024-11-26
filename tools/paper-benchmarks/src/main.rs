@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use argh::FromArgs;
+use benchmarks::print_filesize;
 use convert1::{bench_loro_remote, convert_main};
 use std::collections::BTreeMap;
 use std::hint::black_box;
@@ -54,6 +55,7 @@ pub fn yjs_filename_for(trace: &str) -> String {
 
 pub fn loro_filename_for(trace: &str) -> String {
     format!("{}/datasets/{trace}-updates.loro", stem())
+    // format!("{}/datasets/{trace}-snapshot.loro", stem())
 }
 
 // $ cargo run --features memusage --release
@@ -142,9 +144,9 @@ fn bench_main() {
         let mut c = Criterion::default().configure_from_args();
 
         // bench_cola_remote(&mut c);
-        // bench_automerge_remote(&mut c);
+        bench_automerge_remote(&mut c);
 
-        // bench_yrs_remote(&mut c);
+        bench_yrs_remote(&mut c);
 
         bench_loro_remote(&mut c);
         // bench_ff(&mut c);
@@ -180,8 +182,9 @@ struct Cfg {
 }
 
 fn main() {
-    convert_main();
-    // bench_main()
+    // convert_main();
+    // print_filesize();
+    bench_main()
     // get_cola_stats()
     //
     // #[cfg(feature = "memusage")]

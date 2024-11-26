@@ -11,7 +11,7 @@ use loro::LoroDoc;
 use std::hint::black_box;
 use std::ops::Range;
 use trace_alloc::get_thread_memory_usage;
-use yrs::{Text, TextRef, Transact};
+use yrs::{ReadTxn, StateVector, Text, TextRef, Transact};
 
 // pub const LINEAR_DATASETS: &[&str] = &["automerge-paper", "seph-blog1", "friendsforever_flat", "clownschool_flat"];
 pub const LINEAR_DATASETS: &[&str] = &[
@@ -32,8 +32,16 @@ pub trait UpstreamTextCRDT {
 
     fn local_ins(&mut self, pos: usize, content: &str);
 
+    fn encode(&self) -> Vec<u8>;
+
     fn get_filesize(&self) -> usize {
-        panic!("get_filesize not implemented for type");
+        self.encode().len()
+    }
+
+    fn get_filesize_zstd(&self) -> usize {
+        let data = self.encode();
+        let ans = zstd::encode_all(&data[..], 3).unwrap();
+        ans.len()
     }
     // fn len(&self) -> usize;
 }
@@ -67,8 +75,8 @@ impl UpstreamTextCRDT for (DTCRDT, u16) {
         self.0.local_insert(self.1, pos, content);
     }
 
-    fn get_filesize(&self) -> usize {
-        self.0.encode_small(false).len()
+    fn encode(&self) -> Vec<u8> {
+        self.0.encode_small(false)
     }
 }
 
@@ -111,8 +119,8 @@ impl UpstreamTextCRDT for DT {
         self.0.add_insert(self.1, pos, content);
     }
 
-    fn get_filesize(&self) -> usize {
-        self.0.encode(&ENCODE_FULL).len()
+    fn encode(&self) -> Vec<u8> {
+        self.0.encode(&ENCODE_FULL)
     }
 }
 
@@ -166,8 +174,8 @@ impl UpstreamTextCRDT for AutomergeCRDT {
         self.0.splice_text(&self.1, pos, 0, content).unwrap();
     }
 
-    fn get_filesize(&self) -> usize {
-        self.0.clone().save().len()
+    fn encode(&self) -> Vec<u8> {
+        self.0.clone().save()
     }
 }
 
@@ -217,8 +225,8 @@ impl UpstreamTextCRDT for AutomergeCRDT2 {
             .unwrap();
     }
 
-    fn get_filesize(&self) -> usize {
-        self.0.save().len()
+    fn encode(&self) -> Vec<u8> {
+        self.0.save()
     }
 }
 
@@ -262,6 +270,12 @@ impl UpstreamTextCRDT for (yrs::Doc, TextRef) {
         self.1.insert(&mut txn, pos as u32, content);
         txn.commit();
     }
+
+    fn encode(&self) -> Vec<u8> {
+        self.0
+            .transact()
+            .encode_state_as_update_v2(&StateVector::default())
+    }
 }
 
 impl UpstreamTextCRDT for (loro::LoroDoc, loro::LoroText) {
@@ -285,8 +299,8 @@ impl UpstreamTextCRDT for (loro::LoroDoc, loro::LoroText) {
         self.0.commit();
     }
 
-    fn get_filesize(&self) -> usize {
-        self.0.export(loro::ExportMode::Snapshot).unwrap().len()
+    fn encode(&self) -> Vec<u8> {
+        self.0.export(loro::ExportMode::all_updates()).unwrap()
     }
 }
 
@@ -390,10 +404,10 @@ fn bench_remote<C: UpstreamTextCRDT + DownstreamCRDT>(b: &mut Bencher, data: &Te
     });
 }
 
-fn get_filesize<C: UpstreamTextCRDT>(data: &TestData) -> usize {
+fn get_filesize<C: UpstreamTextCRDT>(data: &TestData) -> (usize, usize) {
     let mut crdt = C::new();
     apply_local_patches(&mut crdt, data);
-    crdt.get_filesize()
+    (crdt.get_filesize(), crdt.get_filesize_zstd())
 }
 
 #[cfg(feature = "bench")]
@@ -424,28 +438,28 @@ pub fn local_benchmarks(c: &mut Criterion) {
     for name in LINEAR_DATASETS {
         let test_data = crate::linear_testing_data(name);
         assert_eq!(test_data.start_content.len(), 0);
-        // let mut local = c.benchmark_group(format!("local/{name}"));
+        let mut local = c.benchmark_group(format!("local/{name}"));
 
-        // local.throughput(Throughput::Elements(test_data.len() as u64));
+        local.throughput(Throughput::Elements(test_data.len() as u64));
 
-        // local.bench_with_input("dt-crdt", &test_data, bench_local::<(DTCRDT, u16)>);
-        // local.bench_with_input("dt", &test_data, bench_local::<DT>);
-        // local.bench_with_input("automerge", &test_data, bench_local::<AutomergeCRDT>);
-        // // group.bench_with_input("automerge2",&test_data, bench_crdt::<AutomergeCRDT2>);
-        // local.bench_with_input("yrs", &test_data, bench_local::<YrsCRDT>);
+        local.bench_with_input("dt-crdt", &test_data, bench_local::<(DTCRDT, u16)>);
+        local.bench_with_input("dt", &test_data, bench_local::<DT>);
+        local.bench_with_input("automerge", &test_data, bench_local::<AutomergeCRDT>);
+        local.bench_with_input("automerge2", &test_data, bench_local::<AutomergeCRDT2>);
+        local.bench_with_input("yrs", &test_data, bench_local::<YrsCRDT>);
+        local.bench_with_input(
+            "loro",
+            &test_data,
+            bench_local::<(loro::LoroDoc, loro::LoroText)>,
+        );
+        // local.bench_with_input("cola", &test_data, bench_local::<cola::Replica>);
         // local.bench_with_input(
-        //     "loro",
+        //     "cola-nocursor",
         //     &test_data,
-        //     bench_local::<(loro::LoroDoc, loro::LoroText)>,
+        //     bench_local::<cola_nocursor::Replica>,
         // );
-        // // local.bench_with_input("cola", &test_data, bench_local::<cola::Replica>);
-        // // local.bench_with_input(
-        // //     "cola-nocursor",
-        // //     &test_data,
-        // //     bench_local::<cola_nocursor::Replica>,
-        // // );
 
-        // local.finish();
+        local.finish();
         //
         //
         let mut remote = c.benchmark_group(format!("remote/{name}"));
@@ -470,20 +484,24 @@ pub fn print_filesize() {
         let test_data = crate::linear_testing_data(name);
 
         println!(
-            "am size for {name}: {}",
+            "am size for {name}: {:?}",
             get_filesize::<AutomergeCRDT>(&test_data)
         );
         println!(
-            "am2 size for {name}: {}",
+            "am2 size for {name}: {:?}",
             get_filesize::<AutomergeCRDT2>(&test_data)
         );
-        println!("dt size for {name}: {}", get_filesize::<DT>(&test_data));
         println!(
-            "dt-crdt size for {name}: {}",
+            "yrs size for {name}: {:?}",
+            get_filesize::<YrsCRDT>(&test_data)
+        );
+        println!("dt size for {name}: {:?}", get_filesize::<DT>(&test_data));
+        println!(
+            "dt-crdt size for {name}: {:?}",
             get_filesize::<(DTCRDT, u16)>(&test_data)
         );
         println!(
-            "loro size for {name}: {}",
+            "loro size for {name}: {:?}",
             get_filesize::<(loro::LoroDoc, loro::LoroText)>(&test_data)
         );
         println!();
